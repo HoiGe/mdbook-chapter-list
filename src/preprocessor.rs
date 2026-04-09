@@ -24,9 +24,8 @@ fn add_nested(listing: &mut String, indent: usize, chapter: &Chapter) {
             // Create the markdown ordered item string.
             writeln!(
                 listing,
-                "{}{}. [{}]({})",
+                "{} - [{}]({})",
                 "   ".repeat(indent),
-                i + 1,
                 sub_chapter.name,
                 relpath.display()
             )
@@ -51,6 +50,9 @@ impl Preprocessor for ChapterList {
         // Look in each book chapter if we have the replacement mark.
         book.for_each_mut(|item| {
             if let BookItem::Chapter(chapter) = item {
+                if !chapter.content.contains("<!-- chapter-list -->") {
+                    chapter.content.push_str("\n\n<!-- chapter-list -->");
+                }
                 // Generate the sub-chapter list.
                 let mut listing = String::new();
                 add_nested(&mut listing, 0, chapter);
