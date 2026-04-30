@@ -250,6 +250,9 @@ mod tests {
             .push(chapter_item("Index", "guide/readme.md"));
         parent
             .sub_items
+            .push(chapter_item("Nested Index", "guide/subdir/readme.md"));
+        parent
+            .sub_items
             .push(BookItem::Chapter(Chapter::new_draft("Draft", Vec::new())));
 
         let mut listing = String::new();
@@ -257,7 +260,7 @@ mod tests {
 
         assert_eq!(
             listing,
-            " - [Section](section.md)\n    - [Nested](nested.md)\n - [External](../reference/external.md)\n - [Index](index.md)\n- Draft\n"
+            " - [Section](section.md)\n    - [Nested](nested.md)\n - [External](../reference/external.md)\n - [Index](index.md)\n - [Nested Index](subdir/index.md)\n- Draft\n"
         );
     }
 

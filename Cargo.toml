@@ -1,6 +1,6 @@
 [package]
 name = "mdbook-chapter-list"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Brad Campbell <bradjc5@gmail.com>"]
 description = "mdbook preprocessor for listing subchapters."
 repository = "https://github.com/bradjc/mdbook-chapter-list.git"
