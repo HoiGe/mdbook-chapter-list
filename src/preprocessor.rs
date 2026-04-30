@@ -65,6 +65,21 @@ fn normalize_path(path: &Path) -> String {
         .join("/")
 }
 
+fn chapter_link_path(path: &Path) -> PathBuf {
+    let mut path = path.to_path_buf();
+
+    if path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| stem.eq_ignore_ascii_case("readme"))
+        .unwrap_or(false)
+    {
+        path.set_file_name("index.md");
+    }
+
+    path
+}
+
 fn add_nested(
     listing: &mut String,
     indent: usize,
@@ -81,8 +96,8 @@ fn add_nested(
 
             // Add the current sub-chapter to the generated list.
             if let Some(sub_path) = &sub_chapter.path {
-                let relpath = pathdiff::diff_paths(sub_path, link_base_dir)
-                    .unwrap_or_else(|| sub_path.to_path_buf());
+                let link_path = chapter_link_path(sub_path);
+                let relpath = pathdiff::diff_paths(&link_path, link_base_dir).unwrap_or(link_path);
                 listing.push_str(&format!(
                     "{} - [{}]({})\n",
                     "   ".repeat(indent),
@@ -172,8 +187,13 @@ mod tests {
             ],
             Path::new("src"),
         );
-        let notes = Chapter::new("Notes", String::new(), "internal/notes.md", Vec::new());
-        let mut chapter = Chapter::new("Home", String::new(), "README.md", Vec::new());
+        let notes = Chapter::new(
+            "Ignored File",
+            String::new(),
+            "internal/notes.md",
+            Vec::new(),
+        );
+        let mut chapter = Chapter::new("Index File", String::new(), "README.md", Vec::new());
         chapter.path = Some(PathBuf::from("index.md"));
 
         assert!(ignored.contains_chapter(&notes));
@@ -183,43 +203,51 @@ mod tests {
     #[test]
     fn updates_content_only_when_there_is_a_visible_listing() {
         let ignored = IgnoredFiles::default();
-        let mut leaf = Chapter::new("Intro", "# Intro".to_string(), "intro.md", Vec::new());
+        let mut leaf = Chapter::new("Leaf", "# Leaf".to_string(), "leaf.md", Vec::new());
         let mut marked = Chapter::new(
             "Marked",
             "<!-- chapter-list -->\n\n<!-- chapter-list -->".to_string(),
             "marked.md",
             Vec::new(),
         );
-        let mut appended = Chapter::new("Parent", "# Parent".to_string(), "parent.md", Vec::new());
+        let mut appended = Chapter::new(
+            "Container",
+            "# Container".to_string(),
+            "parent.md",
+            Vec::new(),
+        );
 
-        marked.sub_items.push(chapter_item("Child", "child.md"));
-        appended.sub_items.push(chapter_item("Child", "child.md"));
+        marked.sub_items.push(chapter_item("Item", "item.md"));
+        appended.sub_items.push(chapter_item("Item", "item.md"));
 
         update_chapter(&mut leaf, &ignored);
         update_chapter(&mut marked, &ignored);
         update_chapter(&mut appended, &ignored);
 
-        assert_eq!(leaf.content, "# Intro");
+        assert_eq!(leaf.content, "# Leaf");
         assert_eq!(
             marked.content,
-            " - [Child](child.md)\n\n\n<!-- chapter-list -->"
+            " - [Item](item.md)\n\n\n<!-- chapter-list -->"
         );
-        assert_eq!(appended.content, "# Parent\n\n - [Child](child.md)\n");
+        assert_eq!(appended.content, "# Container\n\n - [Item](item.md)\n");
     }
 
     #[test]
     fn renders_nested_draft_and_relative_links() {
         let ignored = IgnoredFiles::default();
-        let mut parent = Chapter::new("Parent", String::new(), "guide/parent.md", Vec::new());
-        let mut child = chapter("Child", "guide/child.md");
+        let mut parent = Chapter::new("Root", String::new(), "guide/root.md", Vec::new());
+        let mut child = chapter("Section", "guide/section.md");
         child
             .sub_items
-            .push(chapter_item("Grandchild", "guide/deep.md"));
+            .push(chapter_item("Nested", "guide/nested.md"));
 
         parent.sub_items.push(BookItem::Chapter(child));
         parent
             .sub_items
-            .push(chapter_item("Other", "reference/other.md"));
+            .push(chapter_item("External", "reference/external.md"));
+        parent
+            .sub_items
+            .push(chapter_item("Index", "guide/readme.md"));
         parent
             .sub_items
             .push(BookItem::Chapter(Chapter::new_draft("Draft", Vec::new())));
@@ -229,7 +257,7 @@ mod tests {
 
         assert_eq!(
             listing,
-            " - [Child](child.md)\n    - [Grandchild](deep.md)\n - [Other](../reference/other.md)\n- Draft\n"
+            " - [Section](section.md)\n    - [Nested](nested.md)\n - [External](../reference/external.md)\n - [Index](index.md)\n- Draft\n"
         );
     }
 
@@ -238,30 +266,40 @@ mod tests {
         let ignored = IgnoredFiles::new(
             vec![
                 PathBuf::from("parent.md"),
-                PathBuf::from("A/A1/markdown.md"),
+                PathBuf::from("unicode/章节/index.md"),
             ],
             Path::new("src"),
         );
-        let mut parent = Chapter::new("Parent", "# Parent".to_string(), "parent.md", Vec::new());
-        let mut container =
-            Chapter::new("Container", String::new(), "A/A1/markdown.md", Vec::new());
+        let mut parent = Chapter::new(
+            "Ignored Root",
+            "# Ignored Root".to_string(),
+            "parent.md",
+            Vec::new(),
+        );
+        let mut container = Chapter::new(
+            "Ignored Container",
+            String::new(),
+            "unicode/章节/index.md",
+            Vec::new(),
+        );
         container
             .sub_items
-            .push(chapter_item("Visible Child", "A/A1/child.md"));
+            .push(chapter_item("Visible Item", "unicode/章节/item.md"));
 
         parent
             .sub_items
-            .push(chapter_item("Hidden Parent Child", "hidden.md"));
+            .push(chapter_item("Hidden Item", "hidden.md"));
         update_chapter(&mut parent, &ignored);
 
-        let mut visible_parent = Chapter::new("Parent", String::new(), "index.md", Vec::new());
+        let mut visible_parent =
+            Chapter::new("Visible Root", String::new(), "index.md", Vec::new());
         visible_parent.sub_items.push(BookItem::Chapter(container));
 
         let mut listing = String::new();
         add_nested(&mut listing, 0, &visible_parent, Path::new(""), &ignored);
 
-        assert_eq!(parent.content, "# Parent");
-        assert_eq!(listing, " - [Visible Child](A/A1/child.md)\n");
+        assert_eq!(parent.content, "# Ignored Root");
+        assert_eq!(listing, " - [Visible Item](unicode/章节/item.md)\n");
     }
 
     fn chapter(name: &str, path: &str) -> Chapter {
